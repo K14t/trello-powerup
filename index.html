@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>Trello Power-Up</title>
+</head>
+<body>
+  <script>
+    var powerUp = TrelloPowerUp.initialize({
+      'card-badges': function(t, options) {
+        return t.get('card', 'shared', 'tasks').then(function(tasks) {
+          if (!tasks || tasks.length === 0) return [];
+          var done = tasks.filter(function(task) { return task.checked; }).length;
+          var total = tasks.length;
+          var badges = [{ text: done + '/' + total, color: null }];
+          return t.get('card', 'shared', 'holdReason').then(function(holdReason) {
+            if (holdReason) {
+              badges.push({ color: 'blue', text: '⏳ ' + holdReason });
+              return badges;
+            }
+            var firstUndone = tasks.find(function(task) { return !task.checked && task.due; });
+            if (firstUndone && firstUndone.due) {
+              var now = new Date();
+              var due = new Date(firstUndone.due);
+              var diff = (due - now) / (1000 * 60 * 60 * 24);
+              if (diff <= 1) { badges.push({ color: 'red', text: '🔴' }); }
+              else if (diff <= 2) { badges.push({ color: 'orange', text: '🟠' }); }
+              else if (diff <= 7) { badges.push({ color: 'yellow', text: '🟡' }); }
+            }
+            return badges;
+          });
+        });
+      },
+      'card-detail-badges': function(t, options) {
+        return t.get('card', 'shared', 'tasks').then(function(tasks) {
+          if (!tasks || tasks.length === 0) return [];
+          var done = tasks.filter(function(task) { return task.checked; }).length;
+          return [{ title: '進捗', text: done + ' / ' + tasks.length + ' 完了', color: null }];
+        });
+      },
+      'card-buttons': function(t, options) {
+        return [{
+          icon: 'https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/2705.svg',
+          text: '作業管理',
+          callback: function(t) {
+            return t.popup({ title: '作業管理', url: './popup.html', height: 420 });
+          }
+        }];
+      },
+      'card-back-section': function(t, options) {
+        return {
+          title: '作業進捗',
+          icon: 'https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/2705.svg',
+          content: { type: 'iframe', url: t.signUrl('./back-section.html'), height: 200 }
+        };
+      }
+    });
+  </script>
+  <script src="https://p.trellocdn.com/power-up.min.js"></script>
+</body>
+</html>
