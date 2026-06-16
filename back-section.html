@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 12px; background: #fff; color: #172b4d; padding: 8px; }
+    .tasks-wrap { display: flex; flex-wrap: wrap; gap: 4px 10px; }
+    .task-chip { display: inline-flex; align-items: center; gap: 3px; }
+    .task-chip .check { font-size: 13px; }
+    .task-chip .name { font-size: 12px; }
+    .task-chip .due { font-size: 11px; color: #5e6c84; }
+    .task-chip .due.red { color: #eb5a46; font-weight: 700; }
+    .task-chip .due.orange { color: #ff8800; font-weight: 700; }
+    .task-chip .due.yellow { color: #f2a600; font-weight: 700; }
+    .task-chip .name.done { text-decoration: line-through; color: #a5adba; }
+    .hold-badge { margin-top: 6px; color: #0079bf; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <div class="tasks-wrap" id="tasksWrap"></div>
+  <div class="hold-badge" id="holdBadge"></div>
+
+  <script src="https://p.trellocdn.com/power-up.min.js"></script>
+  <script>
+    var t = TrelloPowerUp.iframe();
+
+    function getDueColor(due) {
+      if (!due) return null;
+      var now = new Date();
+      var d = new Date(due);
+      var diff = (d - now) / (1000 * 60 * 60 * 24);
+      if (diff <= 1) return 'red';
+      if (diff <= 2) return 'orange';
+      if (diff <= 7) return 'yellow';
+      return null;
+    }
+
+    function formatDate(due) {
+      if (!due) return '';
+      var d = new Date(due);
+      return (d.getMonth() + 1) + '/' + d.getDate();
+    }
+
+    t.get('card', 'shared', 'tasks').then(function(tasks) {
+      if (!tasks) return;
+      var wrap = document.getElementById('tasksWrap');
+      tasks.forEach(function(task) {
+        var color = task.checked ? null : getDueColor(task.due);
+        var dateStr = task.due ? formatDate(task.due) : '';
+        var chip = document.createElement('span');
+        chip.className = 'task-chip';
+        chip.innerHTML =
+          '<span class="check">' + (task.checked ? '✅' : '☐') + '</span>' +
+          '<span class="name' + (task.checked ? ' done' : '') + '">' + task.name + '</span>' +
+          (dateStr ? '<span class="due' + (color ? ' ' + color : '') + '">' + dateStr + '</span>' : '');
+        wrap.appendChild(chip);
+      });
+    });
+
+    t.get('card', 'shared', 'holdReason').then(function(reason) {
+      if (reason) {
+        document.getElementById('holdBadge').textContent = '⏳ ' + reason;
+      }
+    });
+  </script>
+</body>
+</html>
