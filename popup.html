@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>作業管理</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 13px; background: #fff; color: #172b4d; padding: 8px; }
+    .section { margin-bottom: 12px; }
+    .section-title { font-weight: 700; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: #5e6c84; margin-bottom: 6px; }
+    .task-list { display: flex; flex-direction: column; gap: 4px; }
+    .task-item { display: flex; align-items: center; gap: 6px; padding: 4px 6px; border-radius: 4px; background: #f4f5f7; }
+    .task-item input[type="checkbox"] { cursor: pointer; width: 14px; height: 14px; flex-shrink: 0; }
+    .task-name { flex: 1; font-weight: 500; }
+    .task-name.done { text-decoration: line-through; color: #a5adba; }
+    .task-due { font-size: 11px; color: #5e6c84; white-space: nowrap; }
+    .task-due.red { color: #eb5a46; font-weight: 700; }
+    .task-due.orange { color: #ff8800; font-weight: 700; }
+    .task-due.yellow { color: #f2a600; font-weight: 700; }
+    .due-btn { font-size: 10px; background: #e0e0e0; border: none; border-radius: 3px; padding: 2px 5px; cursor: pointer; white-space: nowrap; }
+    .due-btn:hover { background: #c0c0c0; }
+    .delete-btn { font-size: 11px; color: #a5adba; background: none; border: none; cursor: pointer; padding: 0 2px; }
+    .delete-btn:hover { color: #eb5a46; }
+    .add-area { display: flex; gap: 4px; margin-top: 4px; }
+    .add-input { flex: 1; border: 1px solid #dfe1e6; border-radius: 4px; padding: 5px 8px; font-size: 12px; }
+    .add-input:focus { outline: none; border-color: #0079bf; }
+    .add-btn { background: #0079bf; color: #fff; border: none; border-radius: 4px; padding: 5px 10px; cursor: pointer; font-size: 12px; white-space: nowrap; }
+    .add-btn:hover { background: #026aa7; }
+    .hold-area { display: flex; flex-direction: column; gap: 4px; }
+    .hold-input { border: 1px solid #dfe1e6; border-radius: 4px; padding: 5px 8px; font-size: 12px; width: 100%; }
+    .hold-input:focus { outline: none; border-color: #0079bf; }
+    .hold-actions { display: flex; gap: 4px; }
+    .save-btn { background: #0079bf; color: #fff; border: none; border-radius: 4px; padding: 5px 10px; cursor: pointer; font-size: 12px; }
+    .save-btn:hover { background: #026aa7; }
+    .clear-btn { background: #eb5a46; color: #fff; border: none; border-radius: 4px; padding: 5px 10px; cursor: pointer; font-size: 12px; }
+    .clear-btn:hover { background: #c9372c; }
+    .due-picker { display: none; align-items: center; gap: 4px; margin-top: 2px; padding: 4px 6px; background: #ebecf0; border-radius: 4px; }
+    .due-picker.open { display: flex; }
+    .due-picker input[type="date"] { border: 1px solid #dfe1e6; border-radius: 3px; padding: 2px 4px; font-size: 11px; }
+    .due-picker .set-btn { background: #0079bf; color: #fff; border: none; border-radius: 3px; padding: 2px 6px; cursor: pointer; font-size: 11px; }
+    .due-picker .remove-btn { background: #a5adba; color: #fff; border: none; border-radius: 3px; padding: 2px 6px; cursor: pointer; font-size: 11px; }
+  </style>
+</head>
+<body>
+  <div class="section">
+    <div class="section-title">作業項目</div>
+    <div class="task-list" id="taskList"></div>
+    <div class="add-area">
+      <input class="add-input" id="newTaskInput" type="text" placeholder="新しい作業を追加...">
+      <button class="add-btn" onclick="addTask()">追加</button>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">保留理由</div>
+    <div class="hold-area">
+      <input class="hold-input" id="holdInput" type="text" placeholder="保留理由を入力（例：工場サンプル作成中）">
+      <div class="hold-actions">
+        <button class="save-btn" onclick="saveHold()">保存</button>
+        <button class="clear-btn" onclick="clearHold()">削除</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://p.trellocdn.com/power-up.min.js"></script>
+  <script>
+    var t = TrelloPowerUp.iframe();
+    var tasks = [];
+    var openDuePicker = null;
+
+    var DEFAULT_TASKS = [
+      { id: 1, name: '初稿', checked: false, due: null },
+      { id: 2, name: '会議', checked: false, due: null },
+      { id: 3, name: '構造', checked: false, due: null },
+      { id: 4, name: '裏面', checked: false, due: null },
+      { id: 5, name: '撮影', checked: false, due: null },
+      { id: 6, name: '展開', checked: false, due: null },
+      { id: 7, name: '出稿', checked: false, due: null }
+    ];
+
+    function getDueColor(due) {
+      if (!due) return null;
+      var now = new Date();
+      var d = new Date(due);
+      var diff = (d - now) / (1000 * 60 * 60 * 24);
+      if (diff <= 1) return 'red';
+      if (diff <= 2) return 'orange';
+      if (diff <= 7) return 'yellow';
+      return null;
+    }
+
+    function formatDate(due) {
+      if (!due) return '';
+      var d = new Date(due);
+      return (d.getMonth() + 1) + '/' + d.getDate();
+    }
+
+    function render() {
+      var list = document.getElementById('taskList');
+      list.innerHTML = '';
+      tasks.forEach(function(task, idx) {
+        var color = task.checked ? null : getDueColor(task.due);
+        var dateStr = task.due ? formatDate(task.due) : '';
+        var colorClass = color ? ' ' + color : '';
+
+        var div = document.createElement('div');
+        div.className = 'task-item';
+        div.innerHTML =
+          '<input type="checkbox"' + (task.checked ? ' checked' : '') + ' onchange="toggleTask(' + idx + ')">' +
+          '<span class="task-name' + (task.checked ? ' done' : '') + '" contenteditable="true" onblur="renameTask(' + idx + ', this.innerText)">' + task.name + '</span>' +
+          (dateStr ? '<span class="task-due' + colorClass + '">' + dateStr + '</span>' : '') +
+          '<button class="due-btn" onclick="toggleDuePicker(' + idx + ')">' + (task.due ? '日付変更' : '日付') + '</button>' +
+          '<button class="delete-btn" onclick="deleteTask(' + idx + ')">✕</button>';
+
+        var picker = document.createElement('div');
+        picker.className = 'due-picker' + (openDuePicker === idx ? ' open' : '');
+        picker.id = 'picker-' + idx;
+        var dateVal = task.due ? task.due.split('T')[0] : '';
+        picker.innerHTML =
+          '<input type="date" id="dateInput-' + idx + '" value="' + dateVal + '">' +
+          '<button class="set-btn" onclick="setDue(' + idx + ')">設定</button>' +
+          '<button class="remove-btn" onclick="removeDue(' + idx + ')">削除</button>';
+
+        list.appendChild(div);
+        list.appendChild(picker);
+      });
+    }
+
+    function toggleTask(idx) {
+      tasks[idx].checked = !tasks[idx].checked;
+      saveTasks();
+    }
+
+    function renameTask(idx, name) {
+      tasks[idx].name = name.trim();
+      saveTasks();
+    }
+
+    function deleteTask(idx) {
+      tasks.splice(idx, 1);
+      saveTasks();
+    }
+
+    function addTask() {
+      var input = document.getElementById('newTaskInput');
+      var name = input.value.trim();
+      if (!name) return;
+      tasks.push({ id: Date.now(), name: name, checked: false, due: null });
+      input.value = '';
+      saveTasks();
+    }
+
+    function toggleDuePicker(idx) {
+      openDuePicker = openDuePicker === idx ? null : idx;
+      render();
+    }
+
+    function setDue(idx) {
+      var input = document.getElementById('dateInput-' + idx);
+      if (input && input.value) {
+        tasks[idx].due = input.value + 'T00:00:00';
+        openDuePicker = null;
+        saveTasks();
+      }
+    }
+
+    function removeDue(idx) {
+      tasks[idx].due = null;
+      openDuePicker = null;
+      saveTasks();
+    }
+
+    function saveTasks() {
+      t.set('card', 'shared', 'tasks', tasks).then(function() {
+        render();
+      });
+    }
+
+    function saveHold() {
+      var val = document.getElementById('holdInput').value.trim();
+      t.set('card', 'shared', 'holdReason', val).then(function() {
+        t.closePopup();
+      });
+    }
+
+    function clearHold() {
+      t.remove('card', 'shared', 'holdReason').then(function() {
+        document.getElementById('holdInput').value = '';
+      });
+    }
+
+    t.get('card', 'shared', 'tasks').then(function(saved) {
+      tasks = saved || DEFAULT_TASKS.map(function(t) { return Object.assign({}, t); });
+      render();
+    });
+
+    t.get('card', 'shared', 'holdReason').then(function(reason) {
+      if (reason) document.getElementById('holdInput').value = reason;
+    });
+
+    document.getElementById('newTaskInput').addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') addTask();
+    });
+  </script>
+</body>
+</html>
